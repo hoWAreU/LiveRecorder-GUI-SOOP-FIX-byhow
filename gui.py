@@ -24,7 +24,8 @@ CORE = ROOT / "recorder-core"
 URL_CONFIG = CORE / "config" / "URL_config.ini"
 APP_CONFIG = CORE / "config" / "config.ini"
 GUI_CONFIG = ROOT / ".gui-settings.json"
-QUALITIES = ("原畫", "藍光", "超清", "高清", "標清", "流暢")
+QUALITIES = ("2K", "1080P", "720P", "540P", "360P", "240P")
+LEGACY_QUALITY = {"原畫": "1080P", "原画": "1080P", "藍光": "1080P", "蓝光": "1080P", "超清": "720P", "高清": "540P", "標清": "360P", "标清": "360P", "流暢": "240P", "流畅": "240P"}
 TO_TRADITIONAL = OpenCC("s2twp")
 
 
@@ -59,7 +60,11 @@ def set_ini_value(path: Path, section: str, key: str, value: str) -> None:
             changed = True
             break
     if not changed:
-        raise KeyError(f"找不到設定：[{section}] {key}")
+        section_index = next((i for i, line in enumerate(lines) if line.strip() == f"[{section}]"), None)
+        if section_index is None:
+            raise KeyError(f"找不到設定區段：[{section}]")
+        insert_at = next((i for i in range(section_index + 1, len(lines)) if lines[i].strip().startswith("[")), len(lines))
+        lines.insert(insert_at, f"{key} = {value}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -154,13 +159,14 @@ class RecorderGUI(tk.Tk):
 
     def _build_ui(self) -> None:
         self.enabled_var = tk.BooleanVar(value=True)
-        self.quality_var = tk.StringVar(value="原畫")
+        self.quality_var = tk.StringVar(value="1080P")
         self.url_var = tk.StringVar()
         self.name_var = tk.StringVar()
         columns = ("enabled", "quality", "url", "name")
         self.output_var = tk.StringVar()
         self.format_var = tk.StringVar(value="ts")
         self.interval_var = tk.StringVar(value="300")
+        self.fps_var = tk.StringVar(value="自動")
         self.proxy_enabled_var = tk.BooleanVar()
         self.proxy_var = tk.StringVar()
         self.soop_cookie_var = tk.StringVar()
@@ -222,7 +228,7 @@ class RecorderGUI(tk.Tk):
         console_header = ttk.Frame(console)
         console_header.pack(fill="x", pady=(0, 10))
         ttk.Label(console_header, text="執行日誌", font=("Microsoft JhengHei UI", 13, "bold")).pack(side="left")
-        self.start_btn = ttk.Button(console_header, text="開始錄製", style="Accent.TButton", command=self.start_recording)
+        self.start_btn = ttk.Button(console_header, text="啟動監控服務", style="Accent.TButton", command=self.start_recording)
         self.start_btn.pack(side="right", padx=(6, 0))
         self.stop_btn = ttk.Button(console_header, text="停止", command=self.stop_recording, state="disabled")
         self.stop_btn.pack(side="right")
@@ -240,7 +246,7 @@ class RecorderGUI(tk.Tk):
             return
         if not edit:
             self.enabled_var.set(True)
-            self.quality_var.set("原畫")
+            self.quality_var.set("1080P")
             self.url_var.set("")
             self.name_var.set("")
             self.tree.selection_remove(*self.tree.selection())
@@ -275,30 +281,31 @@ class RecorderGUI(tk.Tk):
             ("影片格式", ttk.Combobox(body, textvariable=self.format_var, values=("ts", "mkv", "flv", "mp4", "mp3音頻", "m4a音頻"), state="readonly")),
             ("檢查間隔（秒）", ttk.Entry(body, textvariable=self.interval_var)),
             ("代理地址", ttk.Entry(body, textvariable=self.proxy_var)),
+            ("偏好 FPS", ttk.Combobox(body, textvariable=self.fps_var, values=("自動", "30", "60"), state="readonly")),
         ]
         for row, (label, widget) in enumerate(rows):
             ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", padx=(0, 14), pady=9)
             widget.grid(row=row, column=1, sticky="ew", pady=9)
             if row == 0:
                 ttk.Button(body, text="瀏覽…", command=self.choose_output).grid(row=0, column=2, padx=(8, 0))
-        ttk.Checkbutton(body, text="啟用代理", variable=self.proxy_enabled_var).grid(row=4, column=1, sticky="w", pady=8)
-        ttk.Separator(body).grid(row=5, column=0, columnspan=3, sticky="ew", pady=14)
-        ttk.Label(body, text="SOOP 登入（19+ 直播需要）", font=("Microsoft JhengHei UI", 11, "bold")).grid(row=6, column=0, columnspan=2, sticky="w", pady=(0, 8))
-        ttk.Label(body, text="SOOP Cookie").grid(row=7, column=0, sticky="nw", padx=(0, 14), pady=8)
+        ttk.Checkbutton(body, text="啟用代理", variable=self.proxy_enabled_var).grid(row=5, column=1, sticky="w", pady=8)
+        ttk.Separator(body).grid(row=6, column=0, columnspan=3, sticky="ew", pady=14)
+        ttk.Label(body, text="SOOP 登入（19+ 直播需要）", font=("Microsoft JhengHei UI", 11, "bold")).grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ttk.Label(body, text="SOOP Cookie").grid(row=8, column=0, sticky="nw", padx=(0, 14), pady=8)
         cookie_text = scrolledtext.ScrolledText(body, height=4, wrap="word", font=("Consolas", 9), undo=True)
-        cookie_text.grid(row=7, column=1, columnspan=2, sticky="nsew", pady=8)
+        cookie_text.grid(row=8, column=1, columnspan=2, sticky="nsew", pady=8)
         cookie_text.insert("1.0", self.soop_cookie_var.get())
-        ttk.Label(body, text="SOOP 帳號").grid(row=8, column=0, sticky="w", padx=(0, 14), pady=8)
-        ttk.Entry(body, textvariable=self.soop_username_var).grid(row=8, column=1, columnspan=2, sticky="ew", pady=8)
-        ttk.Label(body, text="SOOP 密碼").grid(row=9, column=0, sticky="w", padx=(0, 14), pady=8)
-        ttk.Entry(body, textvariable=self.soop_password_var, show="●").grid(row=9, column=1, columnspan=2, sticky="ew", pady=8)
-        ttk.Label(body, text="登入資料只儲存在本機 config.ini。建議使用 TS 格式。", style="Sub.TLabel").grid(row=10, column=1, columnspan=2, sticky="w", pady=8)
+        ttk.Label(body, text="SOOP 帳號").grid(row=9, column=0, sticky="w", padx=(0, 14), pady=8)
+        ttk.Entry(body, textvariable=self.soop_username_var).grid(row=9, column=1, columnspan=2, sticky="ew", pady=8)
+        ttk.Label(body, text="SOOP 密碼").grid(row=10, column=0, sticky="w", padx=(0, 14), pady=8)
+        ttk.Entry(body, textvariable=self.soop_password_var, show="●").grid(row=10, column=1, columnspan=2, sticky="ew", pady=8)
+        ttk.Label(body, text="FPS 僅選擇平台原生串流，不會重複畫格。", style="Sub.TLabel").grid(row=11, column=1, columnspan=2, sticky="w", pady=8)
         def save_and_close() -> None:
             self.soop_cookie_var.set(cookie_text.get("1.0", "end-1c"))
             if self.save_settings():
                 dialog.destroy()
 
-        ttk.Button(body, text="儲存設定", style="Accent.TButton", command=save_and_close).grid(row=11, column=1, columnspan=2, sticky="e", pady=10)
+        ttk.Button(body, text="儲存設定", style="Accent.TButton", command=save_and_close).grid(row=12, column=1, columnspan=2, sticky="e", pady=10)
 
     def load_rooms(self) -> None:
         self.tree.delete(*self.tree.get_children())
@@ -311,12 +318,15 @@ class RecorderGUI(tk.Tk):
             line = line.lstrip("#").strip()
             parts = [part.strip() for part in re.split("[,，]", line, maxsplit=2)]
             if len(parts) == 1:
-                quality, url, name = "原畫", parts[0], ""
+                quality, url, name = "1080P", parts[0], ""
             elif parts[0] in QUALITIES:
                 quality, url = parts[:2]
                 name = parts[2] if len(parts) > 2 else ""
+            elif parts[0] in LEGACY_QUALITY:
+                quality, url = LEGACY_QUALITY[parts[0]], parts[1]
+                name = parts[2] if len(parts) > 2 else ""
             else:
-                quality, url, name = "原畫", parts[0], parts[1]
+                quality, url, name = "1080P", parts[0], parts[1]
             name = TO_TRADITIONAL.convert(name)
             display_name = name or url.split("/")[-1] or url
             marker = "●" if enabled else "○"
@@ -415,6 +425,8 @@ class RecorderGUI(tk.Tk):
             self.tree.item(selected[0], text=f"  {marker}   {values[3] or values[2].split('/')[-1] or values[2]}")
             self.save_rooms()
             self.select_room()
+            if values[0] == "啟用" and (not self.process or self.process.poll() is not None):
+                self.start_recording()
 
     def delete_room(self) -> None:
         selected = self.tree.selection()
@@ -432,6 +444,7 @@ class RecorderGUI(tk.Tk):
         self.output_var.set(get_ini_value(APP_CONFIG, "录制设置", "直播保存路径(不填则默认)", self.output_var.get()))
         self.format_var.set(get_ini_value(APP_CONFIG, "录制设置", "视频保存格式ts|mkv|flv|mp4|mp3音频|m4a音频", "ts"))
         self.interval_var.set(get_ini_value(APP_CONFIG, "录制设置", "循环时间(秒)", "300"))
+        self.fps_var.set(get_ini_value(APP_CONFIG, "录制设置", "偏好帧率(自动|30|60)", "自动").replace("自动", "自動"))
         self.proxy_enabled_var.set(get_ini_value(APP_CONFIG, "录制设置", "是否使用代理ip(是/否)", "否") == "是")
         self.proxy_var.set(get_ini_value(APP_CONFIG, "录制设置", "代理地址", ""))
         self.soop_cookie_var.set(get_ini_value(APP_CONFIG, "Cookie", "sooplive_cookie", ""))
@@ -446,6 +459,7 @@ class RecorderGUI(tk.Tk):
             set_ini_value(APP_CONFIG, "录制设置", "直播保存路径(不填则默认)", self.output_var.get().strip())
             set_ini_value(APP_CONFIG, "录制设置", "视频保存格式ts|mkv|flv|mp4|mp3音频|m4a音频", self.format_var.get())
             set_ini_value(APP_CONFIG, "录制设置", "循环时间(秒)", str(interval))
+            set_ini_value(APP_CONFIG, "录制设置", "偏好帧率(自动|30|60)", self.fps_var.get().replace("自動", "自动"))
             set_ini_value(APP_CONFIG, "录制设置", "是否使用代理ip(是/否)", "是" if self.proxy_enabled_var.get() else "否")
             set_ini_value(APP_CONFIG, "录制设置", "代理地址", self.proxy_var.get().strip())
             set_ini_value(APP_CONFIG, "Cookie", "sooplive_cookie", self.soop_cookie_var.get().strip())

@@ -384,6 +384,19 @@ def clear_record_info(record_name: str, record_url: str) -> None:
         color_obj.print_colored(f"[{record_name}]已经从录制列表中移除\n", color_obj.YELLOW)
 
 
+def is_record_url_disabled(record_url: str) -> bool:
+    """Read the URL file directly so a GUI stop takes effect immediately."""
+    try:
+        with open(url_config_file, "r", encoding=text_encoding, errors="ignore") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if line.startswith("#") and record_url in line.lstrip("#").strip():
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 def direct_download_stream(source_url: str, save_path: str, record_name: str, live_url: str, platform: str) -> bool:
     try:
         with open(save_path, 'wb') as f:
@@ -436,7 +449,7 @@ def check_subprocess(record_name: str, record_url: str, ffmpeg_command: list, sa
         create_var[subs_thread_name].start()
 
     while process.poll() is None:
-        if record_url in url_comments or exit_recording:
+        if record_url in url_comments or is_record_url_disabled(record_url) or exit_recording:
             color_obj.print_colored(f"[{record_name}]录制时已被注释,本条线程将会退出", color_obj.YELLOW)
             clear_record_info(record_name, record_url)
             # process.terminate()
@@ -508,7 +521,13 @@ def get_quality_code(qn):
         "超清": "UHD",
         "高清": "HD",
         "标清": "SD",
-        "流畅": "LD"
+        "流畅": "LD",
+        "2K": "OD",
+        "1080P": "OD",
+        "720P": "UHD",
+        "540P": "HD",
+        "360P": "SD",
+        "240P": "LD"
     }
     return QUALITY_MAPPING.get(qn)
 
@@ -685,7 +704,8 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                     url=record_url, proxy_addr=proxy_address,
                                     cookies=sooplive_cookie,
                                     username=sooplive_username,
-                                    password=sooplive_password
+                                    password=sooplive_password,
+                                    preferred_fps=preferred_fps
                                 ))
                                 if json_data and json_data.get('new_cookies'):
                                     utils.update_config(
@@ -1809,6 +1829,7 @@ while True:
     clean_emoji = options.get(read_config_value(config, '录制设置', '是否去除名称中的表情符号', "是"), True)
     video_save_type = read_config_value(config, '录制设置', '视频保存格式ts|mkv|flv|mp4|mp3音频|m4a音频', "ts")
     video_record_quality = read_config_value(config, '录制设置', '原画|超清|高清|标清|流畅', "原画")
+    preferred_fps = read_config_value(config, '录制设置', '偏好帧率(自动|30|60)', "自动")
     use_proxy = options.get(read_config_value(config, '录制设置', '是否使用代理ip(是/否)', "是"), False)
     proxy_addr_bak = read_config_value(config, '录制设置', '代理地址', "")
     proxy_addr = None if not use_proxy else proxy_addr_bak
@@ -1983,7 +2004,7 @@ while True:
                 else:
                     quality, url, name = split_line
 
-                if quality not in ("原画", "蓝光", "超清", "高清", "标清", "流畅"):
+                if quality not in ("原画", "蓝光", "超清", "高清", "标清", "流畅", "2K", "1080P", "720P", "540P", "360P", "240P"):
                     quality = '原画'
 
                 if url not in url_line_list:

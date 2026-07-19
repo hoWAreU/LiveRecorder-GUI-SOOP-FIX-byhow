@@ -4,6 +4,7 @@ __pycache__/
 downloads/
 recorder-core/downloads/
 recorder-core/logs/
+logs/
 recorder-core/backup_config/
 .gui-settings.json
 # Runtime configuration may contain account credentials and cookies.
