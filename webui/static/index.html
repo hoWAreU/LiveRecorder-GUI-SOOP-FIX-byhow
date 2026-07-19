@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LiveRecorder Web UI</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar panel">
+      <header class="brand"><h1>LIVE RECORDER</h1><p id="globalStatus">尚未錄製</p></header>
+      <div class="top-actions">
+        <button class="btn secondary" id="settingsBtn">⚙ 設定</button>
+        <button class="btn light" id="addBtn">＋ 新增</button>
+      </div>
+      <div class="room-list" id="roomList"></div>
+      <footer><span>WEB UI v1.0</span><button class="icon-btn" id="themeBtn" title="切換主題">☀</button></footer>
+    </aside>
+
+    <section class="details panel">
+      <div class="preview"><img id="previewImg" alt="直播預覽"><div id="previewEmpty">選擇直播間以載入預覽</div></div>
+      <div class="detail-title"><h2 id="detailName">請選擇直播間</h2><span class="badge" id="detailBadge">—</span></div>
+      <div class="rule"></div>
+      <dl>
+        <div><dt>🔗 直播間網址</dt><dd id="detailUrl">—</dd></div>
+        <div><dt>◉ 錄製畫質</dt><dd id="detailQuality">—</dd></div>
+        <div><dt>▣ 儲存格式</dt><dd id="detailFormat">—</dd></div>
+      </dl>
+      <div class="detail-actions">
+        <button class="btn secondary" id="toggleBtn">▶ 個別開始</button>
+        <button class="btn secondary" id="editBtn">✎ 編輯</button>
+        <button class="btn danger" id="deleteBtn">刪除</button>
+      </div>
+    </section>
+
+    <section class="console panel">
+      <header><div><h2>執行日誌</h2><p>錄製核心的即時輸出</p></div></header>
+      <div class="logs" id="logs"><div class="welcome">LiveRecorder Web UI 已就緒。</div></div>
+      <footer><label><input type="checkbox" id="autoScroll" checked> 自動捲動日誌</label><button class="btn ghost" id="clearBtn">清除</button></footer>
+    </section>
+  </main>
+
+  <dialog id="roomDialog"><form method="dialog" id="roomForm"><div class="modal-head"><h2 id="roomDialogTitle">新增直播間</h2><button value="cancel" class="close">×</button></div><label>直播間網址<input id="roomUrl" type="url" required placeholder="https://play.sooplive.com/..."></label><label>主播名稱<input id="roomName" placeholder="選填"></label><div class="form-row"><label>目標解析度<select id="roomQuality"><option>2K</option><option>1080P</option><option>720P</option><option>540P</option><option>360P</option><option>240P</option></select></label><label class="check"><input id="roomEnabled" type="checkbox" checked> 啟用監看與錄製</label></div><p class="hint">2K 會選擇平台最高畫質；平台未提供時將使用最高可用串流。</p><div class="modal-actions"><button value="cancel" class="btn secondary">取消</button><button type="submit" value="default" class="btn primary">儲存</button></div></form></dialog>
+
+  <dialog id="settingsDialog"><form method="dialog" id="settingsForm"><div class="modal-head"><h2>錄製設定</h2><button value="cancel" class="close">×</button></div><div class="settings-grid"><label>儲存路徑<input id="setOutput"></label><label>影片格式<select id="setFormat"><option>ts</option><option>mkv</option><option>flv</option><option>mp4</option><option>mp3音頻</option><option>m4a音頻</option></select></label><label>檢查間隔（秒）<input id="setInterval" type="number" min="10"></label><label>偏好 FPS<select id="setFps"><option>自動</option><option value="30">30 FPS</option><option value="60">60 FPS</option></select></label><label>代理地址<input id="setProxy" placeholder="127.0.0.1:7890"></label><label class="check"><input id="setProxyEnabled" type="checkbox"> 啟用代理</label></div><p class="hint">FPS 僅選擇平台提供的原生串流，沒有相符幀率時保留來源 FPS。</p><div class="section-title">SOOP 登入（19+ 直播需要）</div><label>SOOP 帳號<input id="setSoopUsername"></label><label>SOOP 密碼<input id="setSoopPassword" type="password" placeholder="留空代表不變更"></label><label>SOOP Cookie<textarea id="setSoopCookie" rows="4" placeholder="留空代表不變更"></textarea></label><p class="hint" id="credentialHint"></p><div class="modal-actions"><button value="cancel" class="btn secondary">取消</button><button type="submit" value="default" class="btn primary">儲存設定</button></div></form></dialog>
+
+  <div class="toast" id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

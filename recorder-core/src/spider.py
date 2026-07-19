@@ -1079,7 +1079,8 @@ async def _fetch_web_stream_data_global(url: str, proxy_addr: OptionalStr = None
 @trace_error_decorator
 async def get_sooplive_stream_data(
         url: str, proxy_addr: OptionalStr = None, cookies: OptionalStr = None,
-        username: OptionalStr = None, password: OptionalStr = None
+        username: OptionalStr = None, password: OptionalStr = None,
+        preferred_fps: str = '自动'
 ) -> dict:
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
@@ -1130,7 +1131,13 @@ async def get_sooplive_stream_data(
                 play_url_list.append(url_prefix + i.strip())
         bandwidth_pattern = re.compile(r'BANDWIDTH=(\d+)')
         bandwidth_list = bandwidth_pattern.findall(resp)
+        frame_rate_list = re.findall(r'FRAME-RATE=([\d.]+)', resp)
         url_to_bandwidth = {purl: int(bandwidth) for bandwidth, purl in zip(bandwidth_list, play_url_list)}
+        if str(preferred_fps) in ('30', '60') and len(frame_rate_list) == len(play_url_list):
+            target_fps = int(preferred_fps)
+            matched_urls = [purl for fps, purl in zip(frame_rate_list, play_url_list) if round(float(fps)) == target_fps]
+            if matched_urls:
+                play_url_list = matched_urls
         play_url_list = sorted(play_url_list, key=lambda purl: url_to_bandwidth[purl], reverse=True)
         return play_url_list
 
