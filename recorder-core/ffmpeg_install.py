@@ -18,7 +18,7 @@ from tqdm import tqdm
 from src.logger import logger
 
 current_platform = platform.system()
-execute_dir = os.path.split(os.path.realpath(sys.argv[0]))[0]
+execute_dir = os.environ.get('LIVE_RECORDER_DATA_ROOT', os.path.split(os.path.realpath(sys.argv[0]))[0])
 current_env_path = os.environ.get('PATH')
 ffmpeg_path = os.path.join(execute_dir, 'ffmpeg')
 

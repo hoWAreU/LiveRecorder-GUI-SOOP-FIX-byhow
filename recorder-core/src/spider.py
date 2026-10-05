@@ -1085,7 +1085,8 @@ async def get_sooplive_stream_data(
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
         'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-        'Referer': 'https://m.sooplive.co.kr/',
+        'Origin': 'https://play.sooplive.com',
+        'Referer': 'https://m.sooplive.com/',
         'Content-Type': 'application/x-www-form-urlencoded',
     }
     if cookies:
@@ -1108,10 +1109,31 @@ async def get_sooplive_stream_data(
         'mode': 'live',
     }
 
-    url2 = 'http://api.m.sooplive.co.kr/broad/a/watch'
+    # The Korean SOOP mobile API moved to the .com domain. The legacy HTTP
+    # endpoint can return an HTML/empty response, which then surfaces as a
+    # misleading JSONDecodeError.
+    url2 = 'https://api.m.sooplive.com/broad/a/watch'
 
     json_str = await async_req(url=url2, proxy_addr=proxy_addr, headers=headers, data=data, abroad=True)
-    json_data = json.loads(json_str)
+    try:
+        json_data = json.loads(json_str)
+    except json.JSONDecodeError as error:
+        if not cookies:
+            raise RuntimeError("SOOP watch API returned a non-JSON response") from error
+
+        # An expired Korean SOOP cookie may return a short HTML page instead
+        # of the normal JSON error. Retry anonymously so the -3002 response
+        # can enter the account-login path and refresh the saved cookie.
+        headers.pop('Cookie', None)
+        json_str = await async_req(
+            url=url2, proxy_addr=proxy_addr, headers=headers, data=data, abroad=True
+        )
+        try:
+            json_data = json.loads(json_str)
+        except json.JSONDecodeError as retry_error:
+            raise RuntimeError(
+                "SOOP watch API returned a non-JSON response after retrying without the saved cookie"
+            ) from retry_error
 
     if 'user_nick' in json_data['data']:
         anchor_name = json_data['data']['user_nick']
