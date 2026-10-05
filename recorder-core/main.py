@@ -66,12 +66,13 @@ start_display_time = datetime.datetime.now()
 global_proxy = False
 recording_time_list = {}
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
-config_file = f'{script_path}/config/config.ini'
-url_config_file = f'{script_path}/config/URL_config.ini'
-backup_dir = f'{script_path}/backup_config'
+data_root = os.environ.get('LIVE_RECORDER_DATA_ROOT', script_path)
+config_file = f'{data_root}/config/config.ini'
+url_config_file = f'{data_root}/config/URL_config.ini'
+backup_dir = f'{data_root}/backup_config'
 text_encoding = 'utf-8-sig'
 rstr = r"[\/\\\:\*\？?\"\<\>\|&#.。,， ~！· ]"
-default_path = f'{script_path}/downloads'
+default_path = f'{data_root}/downloads'
 os.makedirs(default_path, exist_ok=True)
 file_update_lock = threading.Lock()
 os_type = os.name
@@ -1773,6 +1774,20 @@ def read_config_value(config_parser: configparser.RawConfigParser, section: str,
         return default_value
 
 
+def safe_int_config(value: Any, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_float_config(value: Any, default: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 options = {"是": True, "否": False}
 config = configparser.RawConfigParser()
 language = read_config_value(config, '录制设置', 'language(zh_cn/en)', "zh_cn")
@@ -1833,15 +1848,15 @@ while True:
     use_proxy = options.get(read_config_value(config, '录制设置', '是否使用代理ip(是/否)', "是"), False)
     proxy_addr_bak = read_config_value(config, '录制设置', '代理地址', "")
     proxy_addr = None if not use_proxy else proxy_addr_bak
-    max_request = int(read_config_value(config, '录制设置', '同一时间访问网络的线程数', 3))
+    max_request = safe_int_config(read_config_value(config, '录制设置', '同一时间访问网络的线程数', 3), 3)
     semaphore = threading.Semaphore(max_request)
-    delay_default = int(read_config_value(config, '录制设置', '循环时间(秒)', 120))
-    local_delay_default = int(read_config_value(config, '录制设置', '排队读取网址时间(秒)', 0))
+    delay_default = safe_int_config(read_config_value(config, '录制设置', '循环时间(秒)', 120), 120)
+    local_delay_default = safe_int_config(read_config_value(config, '录制设置', '排队读取网址时间(秒)', 0), 0)
     loop_time = options.get(read_config_value(config, '录制设置', '是否显示循环秒数', "否"), False)
     show_url = options.get(read_config_value(config, '录制设置', '是否显示直播源地址', "否"), False)
     split_video_by_time = options.get(read_config_value(config, '录制设置', '分段录制是否开启', "否"), False)
     enable_https_recording = options.get(read_config_value(config, '录制设置', '是否强制启用https录制', "否"), False)
-    disk_space_limit = float(read_config_value(config, '录制设置', '录制空间剩余阈值(gb)', 1.0))
+    disk_space_limit = safe_float_config(read_config_value(config, '录制设置', '录制空间剩余阈值(gb)', 1.0), 1.0)
     split_time = str(read_config_value(config, '录制设置', '视频分段时间(秒)', 1800))
     converts_to_mp4 = options.get(read_config_value(config, '录制设置', '录制完成后自动转为mp4格式', "否"), False)
     converts_to_h264 = options.get(read_config_value(config, '录制设置', 'mp4格式重新编码为h264', "否"), False)
@@ -1882,7 +1897,9 @@ while True:
     begin_push_message_text = read_config_value(config, '推送配置', '自定义开播推送内容', "")
     over_push_message_text = read_config_value(config, '推送配置', '自定义关播推送内容', "")
     disable_record = options.get(read_config_value(config, '推送配置', '只推送通知不录制(是/否)', "否"), False)
-    push_check_seconds = int(read_config_value(config, '推送配置', '直播推送检测频率(秒)', 1800))
+    push_check_seconds = safe_int_config(
+        read_config_value(config, '推送配置', '直播推送检测频率(秒)', 1800), 1800
+    )
     begin_show_push = options.get(read_config_value(config, '推送配置', '开播推送开启(是/否)', "是"), True)
     over_show_push = options.get(read_config_value(config, '推送配置', '关播推送开启(是/否)', "否"), False)
     sooplive_username = read_config_value(config, '账号密码', 'sooplive账号', '')

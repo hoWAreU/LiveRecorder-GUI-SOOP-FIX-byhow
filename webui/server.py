@@ -18,17 +18,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from opencc import OpenCC
+from app_runtime import APP_ROOT, BUNDLE_ROOT, CONFIG_ROOT, CORE, DOWNLOAD_ROOT, core_command
 
 if os.name == "nt":
     import ctypes
     from ctypes import wintypes
 
 
-ROOT = Path(__file__).resolve().parents[1]
-STATIC = Path(__file__).resolve().parent / "static"
-CORE = ROOT / "recorder-core"
-CONFIG = CORE / "config" / "config.ini"
-URL_CONFIG = CORE / "config" / "URL_config.ini"
+ROOT = APP_ROOT
+STATIC = BUNDLE_ROOT / "webui" / "static"
+DESKTOP_STATIC = BUNDLE_ROOT / "desktop-ui" / "dist"
+CONFIG = CONFIG_ROOT / "config.ini"
+URL_CONFIG = CONFIG_ROOT / "URL_config.ini"
 TO_TRADITIONAL = OpenCC("s2twp")
 QUALITIES = ("2K", "1080P", "720P", "540P", "360P", "240P")
 LEGACY_QUALITY = {"原畫": "1080P", "原画": "1080P", "藍光": "1080P", "蓝光": "1080P", "超清": "720P", "高清": "540P", "標清": "360P", "标清": "360P", "流暢": "240P", "流畅": "240P"}
@@ -206,13 +207,12 @@ class Recorder:
             return False, "錄製核心已在執行"
         if not any(room["enabled"] for room in parse_rooms()):
             return False, "請先啟用至少一個直播間"
-        core_python = CORE / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        executable = str(core_python) if core_python.exists() else sys.executable
+        command, core_cwd = core_command()
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         env = os.environ.copy()
         env.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
         self.process = subprocess.Popen(
-            [executable, "-X", "utf8", "-u", "main.py"], cwd=CORE,
+            command, cwd=core_cwd,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             encoding="utf-8", errors="replace", creationflags=flags, env=env,
         )
@@ -260,7 +260,7 @@ VIDEO_EXTENSIONS = {".ts", ".mkv", ".flv", ".mp4"}
 
 
 def recording_roots() -> list[Path]:
-    roots = [CORE / "downloads"]
+    roots = [DOWNLOAD_ROOT]
     configured = get_ini("录制设置", "直播保存路径(不填则默认)").strip()
     if configured:
         path = Path(configured).expanduser()
@@ -436,13 +436,20 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/"):
             self.send_json({"error": "找不到 API"}, 404)
         else:
-            relative = "index.html" if parsed.path in ("", "/") else parsed.path.lstrip("/")
-            target = (STATIC / relative).resolve()
-            if STATIC.resolve() not in target.parents and target != STATIC.resolve():
+            desktop = parsed.path == "/desktop" or parsed.path.startswith("/desktop/")
+            static_root = DESKTOP_STATIC if desktop else STATIC
+            relative = parsed.path.removeprefix("/desktop/") if desktop else parsed.path.lstrip("/")
+            if relative in ("", "desktop"):
+                relative = "index.html"
+            target = (static_root / relative).resolve()
+            if static_root.resolve() not in target.parents and target != static_root.resolve():
                 self.send_error(HTTPStatus.FORBIDDEN)
                 return
             if not target.is_file():
-                target = STATIC / "index.html"
+                target = static_root / "index.html"
+            if not target.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
             data = target.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", mimetypes.guess_type(target.name)[0] or "application/octet-stream")
@@ -494,34 +501,54 @@ class Handler(BaseHTTPRequestHandler):
                 if payload.get("soopCookie"):
                     set_ini("Cookie", "sooplive_cookie", str(payload["soopCookie"]).strip())
                 self.send_json({"ok": True})
+            elif self.path == "/api/open-downloads":
+                configured = get_ini("录制设置", "直播保存路径(不填则默认)").strip()
+                target = Path(configured).expanduser() if configured else DOWNLOAD_ROOT
+                if not target.is_absolute():
+                    target = CORE / target
+                target.mkdir(parents=True, exist_ok=True)
+                if os.name == "nt":
+                    os.startfile(target)
+                else:
+                    subprocess.Popen(["xdg-open", str(target)])
+                self.send_json({"ok": True})
             else:
                 self.send_json({"error": "找不到 API"}, 404)
         except Exception as exc:
             self.send_json({"error": TO_TRADITIONAL.convert(str(exc))}, 400)
 
 
-def main() -> None:
+def create_server(port: int) -> ThreadingHTTPServer:
     ensure_configs()
     host = "127.0.0.1"
-    port = int(os.environ.get("LIVE_RECORDER_PORT", "8765"))
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"LiveRecorder Web UI：http://{host}:{port}")
     enabled_rooms = [room for room in parse_rooms() if room["enabled"]]
-    if enabled_rooms:
+    if enabled_rooms and os.environ.get("LIVE_RECORDER_UI_PREVIEW") != "1":
         ok, message = RECORDER.start()
         RECORDER.append(
             f"Web UI 啟動時偵測到 {len(enabled_rooms)} 個已啟用直播：{message}",
             "success" if ok else "error",
         )
+    return server
+
+
+def close_server(server: ThreadingHTTPServer) -> None:
+    if RECORDER.running:
+        RECORDER.stop()
+    server.server_close()
+    RECORDER.close()
+
+
+def main() -> None:
+    port = int(os.environ.get("LIVE_RECORDER_PORT", "8765"))
+    server = create_server(port)
+    print(f"LiveRecorder Web UI：http://127.0.0.1:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        if RECORDER.running:
-            RECORDER.stop()
-        server.server_close()
-        RECORDER.close()
+        close_server(server)
 
 
 if __name__ == "__main__":

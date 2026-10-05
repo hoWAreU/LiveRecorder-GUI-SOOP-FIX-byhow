@@ -1,9 +1,9 @@
 @echo off
 cd /d "%~dp0"
 if exist "recorder-core\.venv\Scripts\python.exe" (
-  "recorder-core\.venv\Scripts\python.exe" gui.py
+  "recorder-core\.venv\Scripts\python.exe" launcher.py --desktop
   goto :done
 )
-python gui.py
+python launcher.py --desktop
 :done
 if errorlevel 1 pause

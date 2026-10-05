@@ -5,8 +5,15 @@ downloads/
 recorder-core/downloads/
 recorder-core/logs/
 logs/
+build/
+dist/
+build-*/
+dist-*/
+desktop-*-preview*.png
 recorder-core/backup_config/
 .gui-settings.json
+desktop-ui/node_modules/
+desktop-ui/dist/
 # Runtime configuration may contain account credentials and cookies.
 recorder-core/config/config.ini
 recorder-core/config/URL_config.ini

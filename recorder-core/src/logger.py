@@ -5,18 +5,20 @@ import sys
 from loguru import logger
 
 logger.remove()
+is_frozen = bool(getattr(sys, "frozen", False))
+console_sink = sys.stderr if sys.stderr is not None else os.devnull
 
 custom_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> - <level>{message}</level>"
 
 logger.add(
-    sink=sys.stderr,
+    sink=console_sink,
     format=custom_format,
     level="DEBUG",
     colorize=True,
-    enqueue=True
+    enqueue=not is_frozen
 )
 
-script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+script_path = os.environ.get('LIVE_RECORDER_DATA_ROOT', os.path.split(os.path.realpath(sys.argv[0]))[0])
 
 logger.add(
     f"{script_path}/logs/streamget.log",
@@ -24,7 +26,7 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
     filter=lambda i: i["level"].name != "INFO",
     serialize=False,
-    enqueue=True,
+    enqueue=not is_frozen,
     retention=1,
     rotation="300 KB",
     encoding='utf-8'
@@ -36,7 +38,7 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
     filter=lambda i: i["level"].name == "INFO",
     serialize=False,
-    enqueue=True,
+    enqueue=not is_frozen,
     retention=1,
     rotation="300 KB",
     encoding='utf-8'

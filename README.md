@@ -1,10 +1,10 @@
 # LiveRecorder GUI（SOOP Fix byhow）
 
-這是以 [ihmily/DouyinLiveRecorder](https://github.com/ihmily/DouyinLiveRecorder) 為錄製核心製作的 Windows 圖形化介面。專案提供桌面 GUI 與本機 Web UI，並針對 SOOP 韓國站網址、登入、畫質與直播預覽進行相容性調整。
+這是以 [ihmily/DouyinLiveRecorder](https://github.com/ihmily/DouyinLiveRecorder) 為錄製核心製作的 Windows 圖形化介面。新版桌面主介面使用 React + shadcn/ui，透過 WebView2 顯示；錄製核心仍是 Python。專案也保留瀏覽器 Web UI 與舊版 Tkinter 備用介面，並針對 SOOP 韓國站網址、登入、畫質與直播預覽進行相容性調整。
 
 ## 主要功能
 
-- 桌面 GUI 與瀏覽器 Web UI
+- React 桌面 GUI、瀏覽器 Web UI 與 Tkinter 備用介面
 - 深色／淺色主題切換
 - 新增、編輯、刪除及停用直播間
 - 每個直播間可獨立開始或停止，不影響其他直播
@@ -24,8 +24,22 @@
 ## 系統需求
 
 - Windows 10／11
-- Python 3.10 以上
 - FFmpeg（必須可透過系統 `PATH` 執行）
+- WebView2 Runtime（新版桌面視窗需要；若缺少，啟動器會提示並開啟 Tkinter 備用介面）
+- 從原始碼執行或自行打包：Python 3.10 以上、Node.js 與 npm
+
+已打包的 EXE 不需要另外安裝 Python 或執行 `npm install`。部分直播平台的 JavaScript 簽名功能可能仍需 Node.js。
+
+## EXE 版本
+
+取得打包完成的整個 `LiveRecorder` 資料夾後，執行其中的 `LiveRecorder.exe`。啟動器可選擇：
+
+- **桌面版**：以 WebView2 開啟 React + shadcn/ui 三欄式桌面控制台。
+- **網頁版**：啟動本機服務並在預設瀏覽器開啟 Web UI。
+
+請保留整個 `LiveRecorder` 資料夾，不要只單獨移動 EXE。程式核心、React 建置檔、Web 靜態檔及相依 DLL 集中放在 `_internal/`；使用者會操作的 `config/`、`downloads/`、`logs/` 與 `backup_config/` 則放在 EXE 同一層。首次執行時會由範例建立設定，不會把開發電腦上的帳密或 Cookie 打包進去。
+
+開發者若要自行打包，先依下方步驟安裝相依套件，再安裝 PyInstaller 並執行 `build-exe.bat`；輸出位於 `dist/LiveRecorder/`。
 
 ## 安裝
 
@@ -35,14 +49,36 @@ cd LiveRecorder-GUI-SOOP-FIX-byhow\recorder-core
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 cd ..
+.\recorder-core\.venv\Scripts\python -m pip install -r desktop-requirements.txt
+npm ci --prefix desktop-ui
+npm run build --prefix desktop-ui
 ```
+
+`desktop-ui/` 是 React + TypeScript + Vite 專案；套件版本由 `package-lock.json` 固定。第一次啟動新版桌面 GUI 前，須先完成上述 React 建置。若只使用瀏覽器 Web UI，可以略過桌面專用的 `desktop-requirements.txt` 與 React 建置。
+
+### 預覽 React 介面
+
+在專案根目錄開兩個 PowerShell 視窗。第一個啟動本機 API；若只檢查介面、不想讓已啟用的直播間自動錄製，可設定預覽模式：
+
+```powershell
+$env:LIVE_RECORDER_UI_PREVIEW = "1"
+.\recorder-core\.venv\Scripts\python -m webui.server
+```
+
+第二個啟動 Vite：
+
+```powershell
+npm run dev --prefix desktop-ui
+```
+
+開啟 Vite 顯示的本機網址（預設 `http://127.0.0.1:5173`）。開發伺服器會將 `/api` 轉送至 `127.0.0.1:8765`。預覽模式只停用啟動時的自動錄製；若在介面中手動按「開始」，仍會啟動錄製。
 
 ## 啟動 Web UI
 
-雙擊：
+雙擊 `start-webui.bat`，或在專案根目錄執行：
 
-```text
-start-webui.bat
+```powershell
+.\recorder-core\.venv\Scripts\python -m webui.server
 ```
 
 瀏覽器會開啟 [http://127.0.0.1:8765](http://127.0.0.1:8765)。服務預設只監聽本機位址，不會對區域網路或網際網路公開。
@@ -63,17 +99,28 @@ Web UI 的直播間開關就是錄製控制：
 
 ## 啟動桌面 GUI
 
-雙擊：
-
-```text
-start-gui.bat
-```
-
-或使用虛擬環境直接執行：
+雙擊 `start-gui.bat`，或在專案根目錄使用虛擬環境執行：
 
 ```powershell
-.\recorder-core\.venv\Scripts\python gui.py
+.\recorder-core\.venv\Scripts\python launcher.py --desktop
 ```
+
+`launcher.py --desktop` 是新版 React 介面；不帶參數啟動 `launcher.py` 則會出現桌面版／網頁版選擇視窗。若要直接使用舊版 Tkinter，可執行 `python launcher.py --desktop-classic`。
+
+新版桌面 GUI 使用 React + [shadcn/ui](https://ui.shadcn.com/) 元件，透過 Windows WebView2 顯示。左側是可獨立開始／停止的直播間清單，中間是預覽與畫質資訊，右側是錄製日誌；亮色與暗色主題會保留選擇。介面經由本機 `127.0.0.1` API 操作 Python 錄製核心，關閉桌面視窗時會停止由該視窗啟動的錄製服務。
+
+若未安裝 WebView2 Runtime 或缺少 React 建置檔，啟動器會提示原因並開啟先前的 Tkinter 介面。這次是替換桌面主介面，並未刪除 Tkinter 的啟動選擇視窗與備用 GUI。
+
+## 自行打包 EXE
+
+在完成「安裝」步驟後，於專案根目錄執行：
+
+```powershell
+.\recorder-core\.venv\Scripts\python -m pip install pyinstaller
+.\build-exe.bat
+```
+
+`build-exe.bat` 會重新安裝鎖定的前端相依套件、建置 React、確認桌面 Python 相依套件，再產生 `dist/LiveRecorder/LiveRecorder.exe`。請連同 `dist/LiveRecorder/` 內其他檔案一起分發；不要提交 `dist/`、`build/` 或本機執行設定。
 
 ## 設定檔
 
@@ -93,6 +140,7 @@ start-gui.bat
 
 - 建議使用 `https://play.sooplive.com/主播ID/直播編號` 格式。
 - 19+ 或需登入的直播必須設定有效的 SOOP 帳密或 Cookie。
+- 韓國站觀看 API 已改用 `https://api.m.sooplive.com`。若既有 Cookie 過期並導致 SOOP 回傳 HTML，程式會自動改用匿名狀態重新確認、以帳密登入並更新 Cookie。
 - 舊直播編號結束後，SOOP 可能對縮圖回傳 404；介面會自動改用最近成功畫面或主播圖片。
 - 2K 代表選擇平台提供的最高原生畫質，平台未提供 2K 時不會進行放大重新編碼。
 
