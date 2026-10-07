@@ -7,7 +7,6 @@ if not exist "desktop-ui\dist\index.html" (
   exit /b 1
 )
 if not defined LIVE_RECORDER_PORT set "LIVE_RECORDER_PORT=8765"
-start "" http://127.0.0.1:%LIVE_RECORDER_PORT%/
 if exist "recorder-core\.venv\Scripts\python.exe" (
   "recorder-core\.venv\Scripts\python.exe" -m webui.server
 ) else (
