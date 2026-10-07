@@ -436,9 +436,19 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/"):
             self.send_json({"error": "找不到 API"}, 404)
         else:
-            desktop = parsed.path == "/desktop" or parsed.path.startswith("/desktop/")
-            static_root = DESKTOP_STATIC if desktop else STATIC
-            relative = parsed.path.removeprefix("/desktop/") if desktop else parsed.path.lstrip("/")
+            if parsed.path == "/legacy":
+                self.send_response(308)
+                self.send_header("Location", "/legacy/")
+                self.end_headers()
+                return
+            legacy = parsed.path.startswith("/legacy/")
+            static_root = STATIC if legacy else DESKTOP_STATIC
+            if legacy:
+                relative = parsed.path.removeprefix("/legacy/")
+            elif parsed.path == "/desktop" or parsed.path.startswith("/desktop/"):
+                relative = parsed.path.removeprefix("/desktop/")
+            else:
+                relative = parsed.path.lstrip("/")
             if relative in ("", "desktop"):
                 relative = "index.html"
             target = (static_root / relative).resolve()
@@ -518,17 +528,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": TO_TRADITIONAL.convert(str(exc))}, 400)
 
 
-def create_server(port: int) -> ThreadingHTTPServer:
-    ensure_configs()
-    host = "127.0.0.1"
-    server = ThreadingHTTPServer((host, port), Handler)
+def start_enabled_rooms(source: str = "Web UI") -> None:
     enabled_rooms = [room for room in parse_rooms() if room["enabled"]]
     if enabled_rooms and os.environ.get("LIVE_RECORDER_UI_PREVIEW") != "1":
         ok, message = RECORDER.start()
         RECORDER.append(
-            f"Web UI 啟動時偵測到 {len(enabled_rooms)} 個已啟用直播：{message}",
+            f"{source} 啟動時偵測到 {len(enabled_rooms)} 個已啟用直播：{message}",
             "success" if ok else "error",
         )
+
+
+def create_server(port: int, *, auto_start: bool = True) -> ThreadingHTTPServer:
+    ensure_configs()
+    host = "127.0.0.1"
+    server = ThreadingHTTPServer((host, port), Handler)
+    if auto_start:
+        start_enabled_rooms()
     return server
 
 

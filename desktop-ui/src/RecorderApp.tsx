@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { CircleHelp, ExternalLink, FileVideo2, FolderOpen, Link2, Moon, Pencil, Play, Plus, Radio, Settings2, Square, Sun, Trash2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { CircleHelp, ExternalLink, FolderOpen, Moon, Pencil, Play, Plus, Radio, Search, Settings2, Square, Sun, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/components/theme-provider"
@@ -16,7 +16,9 @@ export default function RecorderApp() {
   const { theme, setTheme } = useTheme()
   const [state, setState] = useState<Snapshot | null>(null)
   const [selected, setSelected] = useState(0)
+  const [roomQuery, setRoomQuery] = useState("")
   const [logs, setLogs] = useState<LogLine[]>([])
+  const [logFilter, setLogFilter] = useState<"all" | "error" | "success">("all")
   const [autoScroll, setAutoScroll] = useState(true)
   const [notice, setNotice] = useState("")
   const [roomOpen, setRoomOpen] = useState(false)
@@ -33,6 +35,10 @@ export default function RecorderApp() {
   const rooms = state?.rooms ?? []
   const selectedRoom = rooms[selected] ?? null
   const enabledCount = rooms.filter((room) => room.enabled).length
+  const normalizedQuery = roomQuery.trim().toLocaleLowerCase()
+  const visibleRooms = rooms.map((room, index) => ({ room, index })).filter(({ room }) =>
+    !normalizedQuery || `${roomLabel(room)} ${room.url}`.toLocaleLowerCase().includes(normalizedQuery))
+  const visibleLogs = logFilter === "all" ? logs : logs.filter((line) => line.level === logFilter)
   const previewSupported = !!selectedRoom && /play\.sooplive\.(com|co\.kr)\/.+\/\d+/.test(selectedRoom.url)
 
   function announce(message: string) {
@@ -51,6 +57,23 @@ export default function RecorderApp() {
       .catch((error: Error) => announce(error.message))
     const previewTimer = window.setInterval(() => { setPreviewFailed(false); setPreviewTick(Date.now()) }, 15000)
     return () => window.clearInterval(previewTimer)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    let timer = 0
+    async function refreshState() {
+      try {
+        const data = await api<Snapshot>("/api/state")
+        if (active) {
+          setState(data)
+          setSelected((current) => Math.max(0, Math.min(current, data.rooms.length - 1)))
+        }
+      } catch { /* Retry on the next poll. */ }
+      if (active) timer = window.setTimeout(refreshState, 2500)
+    }
+    timer = window.setTimeout(refreshState, 2500)
+    return () => { active = false; window.clearTimeout(timer) }
   }, [])
 
   useEffect(() => {
@@ -102,6 +125,7 @@ export default function RecorderApp() {
       const result = await api<{ rooms: Room[] }>("/api/rooms/save", { rooms: updated })
       setState((current) => current ? { ...current, rooms: result.rooms } : current)
       setSelected(target)
+      setRoomQuery("")
       setPreviewFailed(false)
       setRoomOpen(false)
       if (item.enabled && !state?.running) await api("/api/recorder/start", {})
@@ -148,37 +172,39 @@ export default function RecorderApp() {
 
   return <div className="app-shell">
     <aside className="room-sidebar">
-      <div className="brand-block"><div className="brand-icon"><Radio className="size-5" /></div><div><div className="brand-title">LIVE RECORDER</div><div className="brand-subtitle">DESKTOP STUDIO</div></div></div>
-      <div className="sidebar-summary"><span className={`status-dot ${state?.running ? "is-live" : ""}`} /><span>{state?.running ? "錄製核心執行中" : "錄製核心待命"}</span><span className="ml-auto tabular-nums">{enabledCount} / {rooms.length}</span></div>
+      <div className="brand-block"><Radio className="brand-mark" aria-hidden="true" /><div className="brand-title">LIVE RECORDER</div></div>
+      <div className="sidebar-summary"><span className={`status-dot ${state?.running ? "is-active" : ""}`} /><span>{state?.running ? "錄製核心執行中" : "錄製核心未啟動"}</span><span className="ml-auto tabular-nums">已啟用 {enabledCount}/{rooms.length}</span></div>
       <div className="sidebar-actions"><Button variant="outline" onClick={openSettings}><Settings2 />設定</Button><Button onClick={() => openRoom(null)}><Plus />新增直播間</Button></div>
-      <div className="sidebar-section-title">直播間 <span>{rooms.length}</span></div>
+      <div className="sidebar-section-title"><span>直播間</span><span>{visibleRooms.length} / {rooms.length}</span></div>
+      <div className="room-search"><Search aria-hidden="true" /><Input type="search" value={roomQuery} onChange={(event) => setRoomQuery(event.target.value)} placeholder="搜尋名稱或網址" aria-label="搜尋直播間" /></div>
       <ScrollArea className="room-scroll"><div className="room-items">
         {rooms.length === 0 && <div className="empty-list">尚未新增直播間<br />按「新增直播間」開始設定。</div>}
-        {rooms.map((room, index) => <div className={`room-item ${selected === index ? "selected" : ""}`} key={`${room.url}-${index}`}>
-          <button className="room-select" onClick={() => { setSelected(index); setPreviewFailed(false) }} aria-label={`選取 ${roomLabel(room)}`}><span className={`status-dot ${room.enabled ? "is-live" : ""}`} /><span className="room-text"><strong>{roomLabel(room)}</strong><small>{room.quality} · {room.enabled ? "已啟用" : "已暫停"}</small></span></button>
-          <Button size="xs" variant={room.enabled ? "destructive" : "outline"} onClick={() => controlRoom(index, !room.enabled)} aria-label={`${room.enabled ? "停止" : "開始"} ${roomLabel(room)}`}>
+        {rooms.length > 0 && visibleRooms.length === 0 && <div className="empty-list">沒有符合「{roomQuery.trim()}」的直播間。</div>}
+        {visibleRooms.map(({ room, index }) => <div className={`room-item ${selected === index ? "selected" : ""}`} key={`${room.url}-${index}`}>
+          <button className="room-select" onClick={() => { setSelected(index); setPreviewFailed(false) }} aria-label={`選取 ${roomLabel(room)}`} aria-current={selected === index ? "true" : undefined}><span className={`status-dot ${room.enabled ? "is-active" : ""}`} /><span className="room-text"><strong>{roomLabel(room)}</strong><small>{room.quality} · {room.enabled ? "監看已啟用" : "已暫停"}</small></span></button>
+          <Button size="xs" variant="outline" className={room.enabled ? "room-stop" : ""} onClick={() => controlRoom(index, !room.enabled)} aria-label={`${room.enabled ? "停止" : "開始"} ${roomLabel(room)}`}>
             {room.enabled ? <Square className="size-3" /> : <Play className="size-3" />}{room.enabled ? "停止" : "開始"}
           </Button>
         </div>)}
       </div></ScrollArea>
-      <div className="sidebar-footer"><span>LIVE RECORDER · v0.4</span><Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="切換亮色或暗色主題" title="切換主題">{theme === "dark" ? <Sun /> : <Moon />}</Button></div>
+      <div className="sidebar-footer"><span>LIVE RECORDER · v0.4.1</span><Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="切換亮色或暗色主題" title="切換主題">{theme === "dark" ? <Sun /> : <Moon />}</Button></div>
     </aside>
 
     <main className="detail-panel">
       <div className="panel-eyebrow">直播間詳情</div>
       <div className="preview-frame">{previewSupported && !previewFailed ? <img src={`/api/preview?url=${encodeURIComponent(selectedRoom!.url)}&t=${previewTick}`} alt={`${roomLabel(selectedRoom!)} 的直播預覽`} onError={() => setPreviewFailed(true)} /> : <div className="preview-placeholder"><Radio className="size-7" /><span>{!selectedRoom ? "選擇直播間以載入預覽" : previewSupported ? "目前沒有可用預覽" : "此平台暫不支援縮圖預覽"}</span></div>}</div>
-      <div className="detail-heading"><div className="min-w-0"><div className="panel-eyebrow">已選擇直播間</div><h1>{selectedRoom ? roomLabel(selectedRoom) : "請選擇直播間"}</h1></div><Badge variant={selectedRoom?.enabled ? "default" : "secondary"} className={selectedRoom?.enabled ? "live-badge" : ""}>{selectedRoom?.enabled ? "監看中" : "已暫停"}</Badge></div>
+      <div className="detail-heading"><h1>{selectedRoom ? roomLabel(selectedRoom) : "請選擇直播間"}</h1><span className="detail-state"><span className={`status-dot ${selectedRoom?.enabled ? "is-active" : ""}`} />{selectedRoom ? selectedRoom.enabled ? "監看已啟用" : "已暫停" : "未選取"}</span></div>
       <Separator />
-      <div className="detail-fields"><div className="detail-field"><div className="field-label"><Link2 />直播間網址</div>{selectedRoom ? <a href={selectedRoom.url} target="_blank" rel="noreferrer" className="room-url">{selectedRoom.url}<ExternalLink className="size-3.5" /></a> : <span className="field-empty">—</span>}</div>
-        <div className="detail-field"><div className="field-label"><Radio />目標畫質</div><strong>{selectedRoom?.quality ?? "—"}</strong></div>
-        <div className="detail-field"><div className="field-label"><FileVideo2 />儲存格式</div><strong>{state?.settings.format ?? "—"}</strong></div></div>
-      <div className="detail-note"><CircleHelp className="size-4" />畫質與 FPS 取決於直播平台提供的原生串流。</div>
-      <div className="detail-actions"><Button disabled={!selectedRoom} variant={selectedRoom?.enabled ? "destructive" : "default"} onClick={() => selectedRoom && controlRoom(selected, !selectedRoom.enabled)}>{selectedRoom?.enabled ? <Square /> : <Play />}{selectedRoom?.enabled ? "停止此直播" : "開始此直播"}</Button><Button disabled={!selectedRoom} variant="outline" onClick={() => openRoom(selected)}><Pencil />編輯</Button><Button disabled={!selectedRoom} variant="outline" className="delete-button" onClick={() => setDeleteOpen(true)}><Trash2 />刪除</Button></div>
+      <dl className="detail-fields"><div className="detail-field"><dt>直播間網址</dt><dd>{selectedRoom ? <a href={selectedRoom.url} target="_blank" rel="noreferrer" className="room-url">{selectedRoom.url}<ExternalLink className="size-3.5" /></a> : <span className="field-empty">—</span>}</dd></div>
+        <div className="detail-field"><dt>目標畫質</dt><dd>{selectedRoom?.quality ?? "—"}</dd></div>
+        <div className="detail-field"><dt>儲存格式</dt><dd>{state?.settings.format ?? "—"}</dd></div></dl>
+      <div className="detail-note"><CircleHelp className="size-4" /><span>啟用監看不代表正在直播或錄製。預覽可能是縮圖或錄影截圖；畫質與 FPS 依來源串流而定。</span></div>
+      <div className="detail-actions"><Button disabled={!selectedRoom} variant={selectedRoom?.enabled ? "outline" : "default"} onClick={() => selectedRoom && controlRoom(selected, !selectedRoom.enabled)}>{selectedRoom?.enabled ? <Square /> : <Play />}{selectedRoom?.enabled ? "停止此直播" : "開始此直播"}</Button><Button disabled={!selectedRoom} variant="outline" onClick={() => openRoom(selected)}><Pencil />編輯</Button><Button disabled={!selectedRoom} variant="outline" className="delete-button" onClick={() => setDeleteOpen(true)}><Trash2 />刪除</Button></div>
     </main>
 
-    <section className="log-panel"><div className="log-header"><div><div className="panel-eyebrow">ACTIVITY</div><h2>執行日誌</h2><p>錄製核心的即時輸出</p></div><Button variant="outline" onClick={openDownloads}><FolderOpen />錄影資料夾</Button></div>
-      <div className="log-summary"><span className={`status-dot ${state?.running ? "is-live" : ""}`} />{state?.running ? "核心執行中" : "核心未啟動"}<span className="ml-auto">{logs.length} 筆顯示中</span></div>
-      <div className="log-window">{logs.length === 0 && <div className="log-empty">LiveRecorder 已就緒。<br />啟動直播間後，執行資訊會顯示在這裡。</div>}{logs.map((line) => <div className={`log-line level-${line.level}`} key={line.id}><time>{line.time}</time><span>{line.text}</span></div>)}<div ref={logEnd} /></div>
+    <section className="log-panel"><div className="log-header"><h2>執行日誌</h2><Button variant="outline" onClick={openDownloads}><FolderOpen />錄影資料夾</Button></div>
+      <div className="log-summary"><span className={`status-dot ${state?.running ? "is-active" : ""}`} /><span>{state?.running ? "核心執行中" : "核心未啟動"}</span><label className="log-filter-label">顯示<select className="native-select log-filter" value={logFilter} onChange={(event) => setLogFilter(event.target.value as "all" | "error" | "success")}><option value="all">全部</option><option value="error">錯誤</option><option value="success">成功</option></select></label><span className="log-count">{visibleLogs.length}/{logs.length} 筆</span></div>
+      <div className="log-window">{logs.length === 0 ? <div className="log-empty">尚無執行日誌。啟動直播間後，輸出會顯示在這裡。</div> : visibleLogs.length === 0 && <div className="log-empty">此篩選目前沒有日誌。</div>}{visibleLogs.map((line) => <div className={`log-line level-${line.level}`} key={line.id}><time>{line.time}</time><span>{line.text}</span></div>)}<div ref={logEnd} /></div>
       <div className="log-footer"><label className="flex items-center gap-2"><Checkbox checked={autoScroll} onCheckedChange={(value) => setAutoScroll(value === true)} />自動捲動日誌</label><Button variant="ghost" size="sm" onClick={() => setLogs([])}>清除畫面</Button></div>
     </section>
 
