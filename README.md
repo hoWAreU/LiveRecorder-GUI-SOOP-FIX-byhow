@@ -1,16 +1,16 @@
 # LiveRecorder GUI（SOOP Fix byhow）
 
-這是以 [ihmily/DouyinLiveRecorder](https://github.com/ihmily/DouyinLiveRecorder) 為錄製核心製作的 Windows 圖形化介面。新版桌面主介面使用 React + shadcn/ui，透過 WebView2 顯示；錄製核心仍是 Python。專案也保留瀏覽器 Web UI 與舊版 Tkinter 備用介面，並針對 SOOP 韓國站網址、登入、畫質與直播預覽進行相容性調整。
+這是以 [ihmily/DouyinLiveRecorder](https://github.com/ihmily/DouyinLiveRecorder) 為錄製核心製作的 Windows 圖形化介面。桌面版與瀏覽器版現在共用同一套 React + shadcn/ui 控制台；桌面版由 WebView2 顯示，錄製核心仍是 Python。專案保留舊版網頁與 Tkinter 備用介面，並針對 SOOP 韓國站網址、登入、畫質與直播預覽進行相容性調整。
 
 ## 主要功能
 
-- React 桌面 GUI、瀏覽器 Web UI 與 Tkinter 備用介面
+- 共用 React 介面的桌面 GUI 與瀏覽器 Web UI，以及舊版備用介面
 - 深色／淺色主題切換
 - 新增、編輯、刪除及停用直播間
 - 每個直播間可獨立開始或停止，不影響其他直播
 - 啟動 Web UI 時自動恢復已啟用的直播間
 - 最後一個直播停止後自動關閉錄製核心
-- 關閉 CMD 或 Web UI 時，自動結束錄製核心與 FFmpeg
+- 關閉提供服務的 CMD 或桌面程式時，自動結束錄製核心與 FFmpeg；只關閉瀏覽器分頁不會停止錄製
 - 錄製畫質選項：2K、1080P、720P、540P、360P、240P
 - FPS 偏好：自動、30 FPS、60 FPS
 - 影片格式與分段錄製設定
@@ -32,10 +32,10 @@
 
 ## EXE 版本
 
-取得打包完成的整個 `LiveRecorder` 資料夾後，執行其中的 `LiveRecorder.exe`。啟動器可選擇：
+取得打包完成的整個 `LiveRecorder` 資料夾後，執行其中的 `LiveRecorder.exe`。首先會顯示與桌面控制台同風格的 React 介面選擇視窗，可選擇：
 
 - **桌面版**：以 WebView2 開啟 React + shadcn/ui 三欄式桌面控制台。
-- **網頁版**：啟動本機服務並在預設瀏覽器開啟 Web UI。
+- **網頁版**：啟動本機服務並在預設瀏覽器開啟同一套 React 控制台。
 
 請保留整個 `LiveRecorder` 資料夾，不要只單獨移動 EXE。程式核心、React 建置檔、Web 靜態檔及相依 DLL 集中放在 `_internal/`；使用者會操作的 `config/`、`downloads/`、`logs/` 與 `backup_config/` 則放在 EXE 同一層。首次執行時會由範例建立設定，不會把開發電腦上的帳密或 Cookie 打包進去。
 
@@ -54,7 +54,7 @@ npm ci --prefix desktop-ui
 npm run build --prefix desktop-ui
 ```
 
-`desktop-ui/` 是 React + TypeScript + Vite 專案；套件版本由 `package-lock.json` 固定。第一次啟動新版桌面 GUI 前，須先完成上述 React 建置。若只使用瀏覽器 Web UI，可以略過桌面專用的 `desktop-requirements.txt` 與 React 建置。
+`desktop-ui/` 是 React + TypeScript + Vite 專案；套件版本由 `package-lock.json` 固定。第一次啟動桌面或瀏覽器 GUI 前，都須先完成 React 建置。若只使用瀏覽器版，可以略過桌面專用的 `desktop-requirements.txt`，但不能略過 React 建置。
 
 ### 預覽 React 介面
 
@@ -81,7 +81,9 @@ npm run dev --prefix desktop-ui
 .\recorder-core\.venv\Scripts\python -m webui.server
 ```
 
-瀏覽器會開啟 [http://127.0.0.1:8765](http://127.0.0.1:8765)。服務預設只監聽本機位址，不會對區域網路或網際網路公開。
+瀏覽器會開啟 [http://127.0.0.1:8765](http://127.0.0.1:8765)。首頁與桌面版的 `/desktop/` 使用同一套 React 控制台、功能與 API；原本的網頁介面保留在 [http://127.0.0.1:8765/legacy/](http://127.0.0.1:8765/legacy/) 作為備用。服務預設只監聽本機位址，不會對區域網路或網際網路公開。
+
+在同一個服務中開啟多個瀏覽器分頁，直播間設定與核心狀態會定期刷新。不要同時執行兩個獨立的 LiveRecorder 服務程序來操作同一份設定；桌面版與網頁版的「選擇模式」是擇一啟動，並非讓兩個錄製核心並行。
 
 如需更換連接埠，可先設定環境變數：
 
@@ -96,6 +98,7 @@ Web UI 的直播間開關就是錄製控制：
 - 停止某個直播只會結束該直播的 FFmpeg。
 - 停止最後一個直播時會自動關閉錄製核心。
 - 關閉 Web UI 的 CMD 視窗時，Windows 會一併回收錄製核心及其 FFmpeg 子程序。
+- 只關閉瀏覽器分頁不會關閉本機服務；需關閉啟動服務的 CMD 視窗才會停止由它管理的錄製。
 
 ## 啟動桌面 GUI
 
@@ -105,11 +108,11 @@ Web UI 的直播間開關就是錄製控制：
 .\recorder-core\.venv\Scripts\python launcher.py --desktop
 ```
 
-`launcher.py --desktop` 是新版 React 介面；不帶參數啟動 `launcher.py` 則會出現桌面版／網頁版選擇視窗。若要直接使用舊版 Tkinter，可執行 `python launcher.py --desktop-classic`。
+`launcher.py --desktop`（以及 `start-gui.bat`）會直接進入新版 React 控制台；不帶參數啟動 `launcher.py` 則會先顯示 React 桌面版／網頁版選擇視窗。選擇之前不會啟動錄製核心。若要直接使用舊版 Tkinter，可執行 `python launcher.py --desktop-classic`。
 
 新版桌面 GUI 使用 React + [shadcn/ui](https://ui.shadcn.com/) 元件，透過 Windows WebView2 顯示。左側是可獨立開始／停止的直播間清單，中間是預覽與畫質資訊，右側是錄製日誌；亮色與暗色主題會保留選擇。介面經由本機 `127.0.0.1` API 操作 Python 錄製核心，關閉桌面視窗時會停止由該視窗啟動的錄製服務。
 
-若未安裝 WebView2 Runtime 或缺少 React 建置檔，啟動器會提示原因並開啟先前的 Tkinter 介面。這次是替換桌面主介面，並未刪除 Tkinter 的啟動選擇視窗與備用 GUI。
+若未安裝 WebView2 Runtime 或缺少 React 建置檔，啟動器會提示原因並開啟 Tkinter 備用選擇視窗；舊版 Tkinter GUI 也仍可使用。
 
 ## 自行打包 EXE
 
