@@ -12,6 +12,7 @@ dist-*/
 desktop-*-preview*.png
 recorder-core/backup_config/
 .gui-settings.json
+.ui-language.json
 desktop-ui/node_modules/
 desktop-ui/dist/
 # Runtime configuration may contain account credentials and cookies.

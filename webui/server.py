@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import errno
 import json
 import mimetypes
 import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
+import webbrowser
 from collections import deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,9 +31,22 @@ if os.name == "nt":
 ROOT = APP_ROOT
 STATIC = BUNDLE_ROOT / "webui" / "static"
 DESKTOP_STATIC = BUNDLE_ROOT / "desktop-ui" / "dist"
+UI_LANGUAGE_FILE = APP_ROOT / ".ui-language.json"
+UI_LANGUAGE_LOCK = threading.Lock()
 CONFIG = CONFIG_ROOT / "config.ini"
 URL_CONFIG = CONFIG_ROOT / "URL_config.ini"
 TO_TRADITIONAL = OpenCC("s2twp")
+
+
+class LocalHTTPServer(ThreadingHTTPServer):
+    # Windows SO_REUSEADDR can permit multiple processes to listen on the same
+    # port. Never let a new UI instance silently share an older recorder's port.
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 QUALITIES = ("2K", "1080P", "720P", "540P", "360P", "240P")
 LEGACY_QUALITY = {"原畫": "1080P", "原画": "1080P", "藍光": "1080P", "蓝光": "1080P", "超清": "720P", "高清": "540P", "標清": "360P", "标清": "360P", "流暢": "240P", "流畅": "240P"}
 
@@ -392,7 +408,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/state":
+        if parsed.path == "/api/ui-language":
+            with UI_LANGUAGE_LOCK:
+                try:
+                    saved = json.loads(UI_LANGUAGE_FILE.read_text(encoding="utf-8")).get("language")
+                except (OSError, ValueError, TypeError, AttributeError):
+                    saved = None
+            self.send_json({"language": saved if saved in ("zh-TW", "en") else None})
+        elif parsed.path == "/api/state":
             self.send_json({
                 "rooms": parse_rooms(), "running": RECORDER.running,
                 "startedAt": RECORDER.started_at,
@@ -471,7 +494,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         try:
             payload = self.read_json()
-            if self.path == "/api/recorder/start":
+            if self.path == "/api/ui-language":
+                language = payload.get("language")
+                if language not in ("zh-TW", "en"):
+                    raise ValueError("不支援的介面語言")
+                with UI_LANGUAGE_LOCK:
+                    temporary = UI_LANGUAGE_FILE.with_suffix(".tmp")
+                    temporary.write_text(json.dumps({"language": language}), encoding="utf-8")
+                    temporary.replace(UI_LANGUAGE_FILE)
+                self.send_json({"language": language})
+            elif self.path == "/api/recorder/start":
                 ok, message = RECORDER.start()
                 self.send_json({"ok": ok, "message": message}, 200 if ok else 409)
             elif self.path == "/api/recorder/stop":
@@ -541,7 +573,7 @@ def start_enabled_rooms(source: str = "Web UI") -> None:
 def create_server(port: int, *, auto_start: bool = True) -> ThreadingHTTPServer:
     ensure_configs()
     host = "127.0.0.1"
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = LocalHTTPServer((host, port), Handler)
     if auto_start:
         start_enabled_rooms()
     return server
@@ -556,8 +588,20 @@ def close_server(server: ThreadingHTTPServer) -> None:
 
 def main() -> None:
     port = int(os.environ.get("LIVE_RECORDER_PORT", "8765"))
-    server = create_server(port)
+    try:
+        server = create_server(port)
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
+            raise SystemExit(
+                f"無法啟動網頁版：127.0.0.1:{port} 已被其他服務占用。"
+                "請確認舊服務是否仍在錄製；安全停止後再重新啟動新版。"
+            ) from None
+        raise
     print(f"LiveRecorder Web UI：http://127.0.0.1:{port}")
+    if os.environ.get("LIVE_RECORDER_NO_BROWSER") != "1":
+        opener = threading.Timer(0.3, lambda: webbrowser.open(f"http://127.0.0.1:{port}/"))
+        opener.daemon = True
+        opener.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

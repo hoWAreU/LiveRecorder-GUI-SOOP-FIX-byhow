@@ -30,8 +30,8 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T
 }
 
-export function roomLabel(room: Room): string {
+export function roomLabel(room: Room, fallback = "未命名直播間"): string {
   if (room.name) return room.name
-  try { return new URL(room.url).pathname.split("/").filter(Boolean)[0] || "未命名直播間" }
-  catch { return "未命名直播間" }
+  try { return new URL(room.url).pathname.split("/").filter(Boolean)[0] || fallback }
+  catch { return fallback }
 }

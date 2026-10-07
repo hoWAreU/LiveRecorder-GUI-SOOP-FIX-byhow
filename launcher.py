@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-import threading
 import tkinter as tk
-import webbrowser
 from tkinter import messagebox, ttk
 
 from app_runtime import APP_ROOT, CORE, ensure_runtime_layout, run_core
@@ -27,10 +25,11 @@ def launch_web(root: tk.Tk | None = None) -> None:
         root.destroy()
     from webui import server
 
-    port = int(os.environ.get("LIVE_RECORDER_PORT", "8765"))
-    if os.environ.get("LIVE_RECORDER_NO_BROWSER") != "1":
-        threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{port}/")).start()
-    server.main()
+    try:
+        server.main()
+    except SystemExit as exc:
+        # PyInstaller is windowed, so a console-only port conflict would be invisible.
+        messagebox.showerror("網頁服務無法啟動", str(exc))
 
 
 def launch_legacy_picker() -> None:
