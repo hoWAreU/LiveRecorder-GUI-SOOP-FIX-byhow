@@ -30,6 +30,8 @@ def launch_web(root: tk.Tk | None = None) -> None:
     except SystemExit as exc:
         # PyInstaller is windowed, so a console-only port conflict would be invisible.
         messagebox.showerror("網頁服務無法啟動", str(exc))
+    except Exception as exc:
+        messagebox.showerror("網頁服務無法啟動", str(exc))
 
 
 def launch_legacy_picker() -> None:
@@ -104,6 +106,8 @@ def main() -> None:
         mark("spider")
         import webview  # noqa: F401
         mark("webview")
+        import tray_runtime  # noqa: F401
+        mark("tray_runtime")
         if not (CORE.parent / "desktop-ui" / "dist" / "index.html").exists():
             raise SystemExit(2)
         mark("desktop_ui")

@@ -190,7 +190,7 @@ export default function RecorderApp() {
           </Button>
         </div>)}
       </div></ScrollArea>
-      <div className="sidebar-footer"><span>LIVE RECORDER · v0.4.2</span><div className="sidebar-preferences"><LanguageToggle /><Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={t(theme === "dark" ? "lightTheme" : "darkTheme")} title={t(theme === "dark" ? "lightTheme" : "darkTheme")}>{theme === "dark" ? <Sun /> : <Moon />}</Button></div></div>
+      <div className="sidebar-footer"><span>LIVE RECORDER · v0.4.3</span><div className="sidebar-preferences"><LanguageToggle /><Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={t(theme === "dark" ? "lightTheme" : "darkTheme")} title={t(theme === "dark" ? "lightTheme" : "darkTheme")}>{theme === "dark" ? <Sun /> : <Moon />}</Button></div></div>
     </aside>
 
     <main className="detail-panel">
