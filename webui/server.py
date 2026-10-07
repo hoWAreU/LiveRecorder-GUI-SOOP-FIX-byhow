@@ -38,6 +38,15 @@ URL_CONFIG = CONFIG_ROOT / "URL_config.ini"
 TO_TRADITIONAL = OpenCC("s2twp")
 
 
+def read_ui_language() -> str | None:
+    with UI_LANGUAGE_LOCK:
+        try:
+            saved = json.loads(UI_LANGUAGE_FILE.read_text(encoding="utf-8")).get("language")
+        except (OSError, ValueError, TypeError, AttributeError):
+            saved = None
+    return saved if saved in ("zh-TW", "en") else None
+
+
 class LocalHTTPServer(ThreadingHTTPServer):
     # Windows SO_REUSEADDR can permit multiple processes to listen on the same
     # port. Never let a new UI instance silently share an older recorder's port.
@@ -409,12 +418,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/ui-language":
-            with UI_LANGUAGE_LOCK:
-                try:
-                    saved = json.loads(UI_LANGUAGE_FILE.read_text(encoding="utf-8")).get("language")
-                except (OSError, ValueError, TypeError, AttributeError):
-                    saved = None
-            self.send_json({"language": saved if saved in ("zh-TW", "en") else None})
+            self.send_json({"language": read_ui_language()})
         elif parsed.path == "/api/state":
             self.send_json({
                 "rooms": parse_rooms(), "running": RECORDER.running,
@@ -587,6 +591,8 @@ def close_server(server: ThreadingHTTPServer) -> None:
 
 
 def main() -> None:
+    from tray_runtime import TrayController
+
     port = int(os.environ.get("LIVE_RECORDER_PORT", "8765"))
     try:
         server = create_server(port)
@@ -597,17 +603,45 @@ def main() -> None:
                 "請確認舊服務是否仍在錄製；安全停止後再重新啟動新版。"
             ) from None
         raise
-    print(f"LiveRecorder Web UI：http://127.0.0.1:{port}")
-    if os.environ.get("LIVE_RECORDER_NO_BROWSER") != "1":
-        opener = threading.Timer(0.3, lambda: webbrowser.open(f"http://127.0.0.1:{port}/"))
-        opener.daemon = True
-        opener.start()
+    address = f"http://127.0.0.1:{port}/"
+    stopped = threading.Event()
+    server_errors: list[BaseException] = []
+
+    def serve() -> None:
+        try:
+            server.serve_forever()
+        except BaseException as exc:
+            server_errors.append(exc)
+        finally:
+            stopped.set()
+
+    worker = threading.Thread(target=serve, name="web-ui-http", daemon=True)
+    worker.start()
+    tray: TrayController | None = None
     try:
-        server.serve_forever()
+        tray = TrayController(
+            open_ui=lambda: webbrowser.open(address),
+            exit_app=stopped.set,
+            recorder_running=lambda: RECORDER.running,
+            language=read_ui_language,
+        )
+        tray.start_background()
+        print(f"LiveRecorder Web UI：{address}")
+        if os.environ.get("LIVE_RECORDER_NO_BROWSER") != "1":
+            opener = threading.Timer(0.3, lambda: webbrowser.open(address))
+            opener.daemon = True
+            opener.start()
+        stopped.wait()
     except KeyboardInterrupt:
         pass
     finally:
+        server.shutdown()
+        worker.join(timeout=3)
+        if tray is not None:
+            tray.stop()
         close_server(server)
+    if server_errors:
+        raise RuntimeError("LiveRecorder 網頁服務異常結束") from server_errors[0]
 
 
 if __name__ == "__main__":

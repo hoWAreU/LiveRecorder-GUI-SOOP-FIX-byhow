@@ -2,6 +2,8 @@
 
 這是以 [ihmily/DouyinLiveRecorder](https://github.com/ihmily/DouyinLiveRecorder) 為錄製核心製作的 Windows 圖形化介面。桌面版與瀏覽器版現在共用同一套 React + shadcn/ui 控制台；桌面版由 WebView2 顯示，錄製核心仍是 Python。專案保留舊版網頁與 Tkinter 備用介面，並針對 SOOP 韓國站網址、登入、畫質與直播預覽進行相容性調整。
 
+本專案僅持續維護 SOOP 相關功能；其他平台功能沿用上游錄製核心，不保證在此分支持續更新。
+
 ## 主要功能
 
 - 共用 React 介面的桌面 GUI 與瀏覽器 Web UI，以及舊版備用介面
@@ -10,7 +12,7 @@
 - 每個直播間可獨立開始或停止，不影響其他直播
 - 啟動 Web UI 時自動恢復已啟用的直播間
 - 最後一個直播停止後自動關閉錄製核心
-- 關閉提供服務的 CMD 或桌面程式時，自動結束錄製核心與 FFmpeg；只關閉瀏覽器分頁不會停止錄製
+- 從系統匣選擇「停止錄製並結束程式」時，結束錄製核心與 FFmpeg；關閉桌面視窗會縮到系統匣，關閉瀏覽器分頁不會停止錄製
 - 錄製畫質選項：2K、1080P、720P、540P、360P、240P
 - FPS 偏好：自動、30 FPS、60 FPS
 - 影片格式與分段錄製設定
@@ -54,7 +56,7 @@ npm ci --prefix desktop-ui
 npm run build --prefix desktop-ui
 ```
 
-`desktop-ui/` 是 React + TypeScript + Vite 專案；套件版本由 `package-lock.json` 固定。第一次啟動桌面或瀏覽器 GUI 前，都須先完成 React 建置。若只使用瀏覽器版，可以略過桌面專用的 `desktop-requirements.txt`，但不能略過 React 建置。
+`desktop-ui/` 是 React + TypeScript + Vite 專案；套件版本由 `package-lock.json` 固定。第一次啟動桌面或瀏覽器 GUI 前，都須完成 React 建置並安裝 `desktop-requirements.txt`（包含系統匣功能）。
 
 ### 預覽 React 介面
 
@@ -100,9 +102,9 @@ Web UI 的直播間開關就是錄製控制：
 - 停止某個直播只會結束該直播的 FFmpeg。
 - 停止最後一個直播時會自動關閉錄製核心。
 - 關閉 Web UI 的 CMD 視窗時，Windows 會一併回收錄製核心及其 FFmpeg 子程序。
-- 只關閉瀏覽器分頁不會關閉本機服務；需關閉啟動服務的 CMD 視窗才會停止由它管理的錄製。
+- 只關閉瀏覽器分頁不會關閉本機服務；可從右下角系統匣圖示重新開啟介面，或選擇「停止錄製並結束程式」。從 CMD 啟動時，關閉 CMD 視窗也會結束服務。
 
-EXE 以無主控台模式打包；選擇網頁版後，選擇視窗會關閉，但 `LiveRecorder.exe` 仍在背景提供本機服務，因此工作列不一定有可見視窗。不要只憑瀏覽器分頁判斷服務是否已結束；可在工作管理員確認 `LiveRecorder.exe`。新版啟動器會阻止多個實例共用同一個連接埠。
+EXE 以無主控台模式打包；選擇網頁版後，選擇視窗會關閉，但 `LiveRecorder.exe` 仍在背景提供本機服務。右下角系統匣會保留 LiveRecorder 圖示，右鍵可查看錄製核心狀態、重新開啟介面或停止錄製並結束程式。圖示可能收在 Windows 通知區域的 `^` 選單內。新版啟動器也會阻止多個實例共用同一個連接埠。
 
 ## 啟動桌面 GUI
 
@@ -114,7 +116,7 @@ EXE 以無主控台模式打包；選擇網頁版後，選擇視窗會關閉，�
 
 `launcher.py --desktop`（以及 `start-gui.bat`）會直接進入新版 React 控制台；不帶參數啟動 `launcher.py` 則會先顯示 React 桌面版／網頁版選擇視窗。選擇之前不會啟動錄製核心。若要直接使用舊版 Tkinter，可執行 `python launcher.py --desktop-classic`。
 
-新版桌面 GUI 使用 React + [shadcn/ui](https://ui.shadcn.com/) 元件，透過 Windows WebView2 顯示。左側是可獨立開始／停止的直播間清單，中間是預覽與畫質資訊，右側是錄製日誌；亮色與暗色主題會保留選擇。介面經由本機 `127.0.0.1` API 操作 Python 錄製核心，關閉桌面視窗時會停止由該視窗啟動的錄製服務。
+新版桌面 GUI 使用 React + [shadcn/ui](https://ui.shadcn.com/) 元件，透過 Windows WebView2 顯示。左側是可獨立開始／停止的直播間清單，中間是預覽與畫質資訊，右側是錄製日誌；亮色與暗色主題會保留選擇。介面經由本機 `127.0.0.1` API 操作 Python 錄製核心。按桌面視窗右上角 X 會隱藏到系統匣並繼續監看／錄製；在系統匣選擇「開啟介面」可恢復視窗，選擇「停止錄製並結束程式」才會停止核心並退出。
 
 桌面版與新版網頁版可在介面底部切換繁體中文／English；啟動選擇器右上角也能切換。選擇會儲存在本機 `.ui-language.json`，下次啟動仍有效。此切換只翻譯 React 操作介面；主播名稱、錄製核心原始日誌、舊版 `/legacy/` 網頁與 Tkinter 備用介面不會自動翻譯。
 

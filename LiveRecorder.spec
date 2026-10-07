@@ -48,6 +48,7 @@ for package in ("httpx", "httpcore", "h2", "requests", "loguru", "Crypto", "dist
     hiddenimports += collect_submodules(package)
 hiddenimports += collect_submodules("email")
 hiddenimports += collect_submodules("webview")
+hiddenimports += ["pystray._win32"]
 hiddenimports += [
     "smtplib", "gettext", "inspect", "configparser", "gzip", "ssl",
     "email.header", "email.mime.multipart", "email.mime.text",

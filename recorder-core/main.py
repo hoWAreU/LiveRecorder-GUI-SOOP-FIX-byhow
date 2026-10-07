@@ -39,10 +39,6 @@ from ffmpeg_install import (
 )
 
 version = "v4.0.7"
-platforms = ("\n国内站点：抖音|快手|虎牙|斗鱼|YY|B站|小红书|bigo|blued|网易CC|千度热播|猫耳FM|Look|TwitCasting|百度|微博|"
-             "酷狗|花椒|流星|Acfun|畅聊|映客|音播|知乎|嗨秀|VV星球|17Live|浪Live|漂漂|六间房|乐嗨|花猫|淘宝|京东|咪咕|连接|来秀"
-             "\n海外站点：TikTok|SOOP|PandaTV|WinkTV|FlexTV|PopkonTV|TwitchTV|LiveMe|ShowRoom|CHZZK|Shopee|"
-             "Youtube|Faceit|Picarto")
 
 recording = set()
 error_count = 0
@@ -1734,14 +1730,11 @@ def check_ffmpeg_existence() -> bool:
 
 
 # --------------------------初始化程序-------------------------------------
-print("-----------------------------------------------------")
-print("|                DouyinLiveRecorder                 |")
-print("-----------------------------------------------------")
-
-print(f"版本号: {version}")
-print("GitHub: https://github.com/ihmily/DouyinLiveRecorder")
-print(f'支持平台: {platforms}')
-print('.....................................................')
+print("LiveRecorder")
+print("專案網址: https://github.com/hoWAreU/LiveRecorder-GUI-SOOP-FIX-byhow")
+print("維護範圍: 本專案僅持續維護 SOOP 相關功能")
+print(f"錄製核心: DouyinLiveRecorder {version}")
+print("核心來源: https://github.com/ihmily/DouyinLiveRecorder")
 if not check_ffmpeg_existence():
     logger.error("缺少ffmpeg无法进行录制，程序退出")
     sys.exit(1)
