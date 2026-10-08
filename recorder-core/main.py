@@ -28,6 +28,11 @@ from typing import Any
 import configparser
 import httpx
 from src import spider, stream
+from src.ffmpeg_options import (
+    recording_corrupt_packet_options,
+    recording_input_options,
+    recording_log_level,
+)
 from src.proxy import ProxyDetector
 from src.utils import logger
 from src import utils
@@ -697,12 +702,13 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                         platform = 'SOOP'
                         with semaphore:
                             if global_proxy or proxy_address:
-                                json_data = asyncio.run(spider.get_sooplive_stream_data(
-                                    url=record_url, proxy_addr=proxy_address,
+                                 json_data = asyncio.run(spider.get_sooplive_stream_data(
+                                     url=record_url, proxy_addr=proxy_address,
                                     cookies=sooplive_cookie,
                                     username=sooplive_username,
                                     password=sooplive_password,
-                                    preferred_fps=preferred_fps
+                                    preferred_fps=preferred_fps,
+                                    requested_quality=record_quality_zh
                                 ))
                                 if json_data and json_data.get('new_cookies'):
                                     utils.update_config(
@@ -1195,15 +1201,15 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                     'ffmpeg', "-y",
                                     "-v", "verbose",
                                     "-rw_timeout", rw_timeout,
-                                    "-loglevel", "error",
+                                    "-loglevel", recording_log_level(platform),
                                     "-hide_banner",
                                     "-user_agent", user_agent,
                                     "-protocol_whitelist", "rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy",
                                     "-thread_queue_size", "1024",
                                     "-analyzeduration", analyzeduration,
                                     "-probesize", probesize,
-                                    "-fflags", "+discardcorrupt",
-                                    "-re", "-i", real_url,
+                                    *recording_corrupt_packet_options(platform),
+                                    *recording_input_options(platform, real_url),
                                     "-bufsize", bufsize,
                                     "-sn", "-dn",
                                     "-reconnect_delay_max", "60",

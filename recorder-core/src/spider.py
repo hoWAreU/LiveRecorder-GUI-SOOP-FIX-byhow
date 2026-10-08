@@ -30,6 +30,7 @@ from .logger import script_path
 from .room import get_sec_user_id, get_unique_id, UnsupportedUrlError
 from .http_clients.async_http import async_req
 from .ab_sign import ab_sign
+from .soop_quality import ordered_presets, preset_height
 
 
 ssl_context = ssl.create_default_context()
@@ -963,6 +964,100 @@ async def get_sooplive_cdn_url(broad_no: str, proxy_addr: OptionalStr = None, co
     return json_data
 
 
+async def _get_sooplive_desktop_stream_data(
+        url: str, requested_quality: str, proxy_addr: OptionalStr = None,
+        cookies: OptionalStr = None, username: OptionalStr = None,
+        password: OptionalStr = None) -> OptionalDict:
+    """Resolve a quality-specific Korean SOOP stream via the desktop player API."""
+    path_parts = urllib.parse.urlparse(url).path.strip('/').split('/')
+    if not path_parts or not path_parts[0]:
+        return None
+    bj_id = path_parts[0]
+    broad_no = path_parts[1] if len(path_parts) > 1 and path_parts[1].isdigit() else ''
+    api_url = 'https://live.sooplive.com/afreeca/player_live_api.php'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                      '(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+        'Origin': 'https://play.sooplive.com',
+        'Referer': url,
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+    if cookies:
+        headers['Cookie'] = cookies
+    common_data = {
+        'bid': bj_id,
+        'bno': broad_no,
+        'pwd': get_params(url, 'pwd') or '',
+        'player_type': 'html5',
+        'stream_type': 'common',
+        'mode': 'landing',
+        'from_api': '0',
+    }
+
+    async def player_request(kind: str, quality: str = '') -> dict:
+        data = {**common_data, 'type': kind}
+        if quality:
+            data['quality'] = quality
+        response = await async_req(api_url, proxy_addr=proxy_addr, headers=headers,
+                                   data=data, abroad=True)
+        return json.loads(response)['CHANNEL']
+
+    try:
+        channel = await player_request('live')
+        if int(channel.get('RESULT', 0)) == -6 and username and password:
+            refreshed_cookie = await login_sooplive(username, password, proxy_addr=proxy_addr)
+            if refreshed_cookie:
+                headers['Cookie'] = refreshed_cookie
+                channel = await player_request('live')
+        else:
+            refreshed_cookie = None
+        if int(channel.get('RESULT', 0)) != 1:
+            return None
+
+        broad_no = str(channel.get('BNO') or broad_no)
+        if not broad_no.isdigit():
+            return None
+        common_data['bno'] = broad_no
+        presets = ordered_presets(channel.get('VIEWPRESET') or [], requested_quality)
+        cdn = str(channel.get('CDN') or 'gcp_cdn')
+        return_type = next((mapped for key, mapped in {
+            'gs_cdn': 'gs_cdn_pc_web', 'lg_cdn': 'lg_cdn_pc_web'
+        }.items() if key in cdn), cdn)
+        manager_url = 'https://livestream-manager.sooplive.com/broad_stream_assign.html'
+        for preset in presets:
+            quality = str(preset['name'])
+            aid_channel = await player_request('aid', quality)
+            aid = aid_channel.get('AID')
+            if int(aid_channel.get('RESULT', 0)) != 1 or not aid:
+                continue
+            params = urllib.parse.urlencode({
+                'return_type': return_type,
+                'broad_key': f'{broad_no}-common-{quality}-hls',
+            })
+            manager_response = await async_req(
+                f'{manager_url}?{params}', proxy_addr=proxy_addr, headers=headers, abroad=True
+            )
+            view_url = json.loads(manager_response).get('view_url')
+            if not isinstance(view_url, str) or not view_url.startswith('https://'):
+                continue
+            separator = '&' if '?' in view_url else '?'
+            m3u8_url = view_url + separator + urllib.parse.urlencode({'aid': aid})
+            selected_height = preset_height(preset)
+            print(f'SOOP 錄製畫質：要求 {requested_quality}，平台提供 {preset["label"]} '
+                  f'({selected_height}p)')
+            return {
+                'anchor_name': f'{channel.get("BJNICK") or bj_id}-{bj_id}',
+                'is_live': True,
+                'title': channel.get('TITLE'),
+                'm3u8_url': m3u8_url,
+                'play_url_list': [m3u8_url],
+                'new_cookies': refreshed_cookie,
+            }
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(f'SOOP 桌面播放器畫質查詢失敗：{type(error).__name__}')
+    return None
+
+
 @trace_error_decorator
 async def get_sooplive_tk(url: str, rtype: str, proxy_addr: OptionalStr = None, cookies: OptionalStr = None) -> str | tuple:
     headers = {
@@ -1080,7 +1175,7 @@ async def _fetch_web_stream_data_global(url: str, proxy_addr: OptionalStr = None
 async def get_sooplive_stream_data(
         url: str, proxy_addr: OptionalStr = None, cookies: OptionalStr = None,
         username: OptionalStr = None, password: OptionalStr = None,
-        preferred_fps: str = '自动'
+        preferred_fps: str = '自动', requested_quality: str = '原画'
 ) -> dict:
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
@@ -1096,6 +1191,13 @@ async def get_sooplive_stream_data(
     # Global API path only for URLs without the /streamer/broadcast shape.
     if "sooplive.com" in url and not re.search(r'play\.sooplive\.com/[^/]+/\d+', url):
         return await _fetch_web_stream_data_global(url, proxy_addr, cookies)
+
+    desktop_result = await _get_sooplive_desktop_stream_data(
+        url, requested_quality, proxy_addr, cookies, username, password
+    )
+    if desktop_result:
+        return desktop_result
+    print('SOOP 桌面播放器未提供可用串流，改用舊版播放清單；實際解析度可能低於設定。')
 
     split_url = url.split('/')
     bj_id = split_url[3] if len(split_url) < 6 else split_url[5]
