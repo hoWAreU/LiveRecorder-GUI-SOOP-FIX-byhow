@@ -702,8 +702,8 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                         platform = 'SOOP'
                         with semaphore:
                             if global_proxy or proxy_address:
-                                 json_data = asyncio.run(spider.get_sooplive_stream_data(
-                                     url=record_url, proxy_addr=proxy_address,
+                                json_data = asyncio.run(spider.get_sooplive_stream_data(
+                                    url=record_url, proxy_addr=proxy_address,
                                     cookies=sooplive_cookie,
                                     username=sooplive_username,
                                     password=sooplive_password,

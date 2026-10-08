@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tokenize
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -104,6 +105,9 @@ def main() -> None:
         mark("src")
         from src import spider  # noqa: F401
         mark("spider")
+        with tokenize.open(CORE / "main.py") as core_source:
+            compile(core_source.read(), str(CORE / "main.py"), "exec")
+        mark("main_syntax")
         import webview  # noqa: F401
         mark("webview")
         import tray_runtime  # noqa: F401

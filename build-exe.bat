@@ -25,6 +25,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+"%PYTHON_EXE%" -m unittest discover -s tests
+if errorlevel 1 (
+  echo Python tests or packaged source syntax check failed. EXE was not built.
+  pause
+  exit /b 1
+)
+
 "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean LiveRecorder.spec
 if errorlevel 1 (
   echo.
